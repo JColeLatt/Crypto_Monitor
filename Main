@@ -1,0 +1,182 @@
+import requests
+import feedparser
+import pandas as pd
+from rich.console import Console
+from rich.table import Table
+from rich.box import SIMPLE, SQUARE
+import time
+import datetime
+import os
+
+console = Console()
+
+def fetch_crypto_data(currency="usd"):
+    crypto_ids = [
+        "bitcoin", "ethereum", "solana", "ripple", "cardano",
+        "dogecoin", "shiba-inu", "polkadot", "litecoin",
+        "chainlink", "stellar", "avalanche-2", "tron",
+        "monero", "near", "vechain", "filecoin",
+        "algorand", "tezos", "theta-token"
+    ]
+    url = f"https://api.coingecko.com/api/v3/simple/price"
+    params = {
+        "ids": ",".join(crypto_ids),
+        "vs_currencies": currency,
+        "include_market_cap": "true",
+        "include_24hr_vol": "true",
+        "include_24hr_change": "true"
+    }
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        crypto_data = []
+        for crypto in crypto_ids:
+            crypto_data.append({
+                "Name": crypto.title(),
+                "Price": data[crypto][currency],
+                "24h Change (%)": data[crypto][f"{currency}_24h_change"],
+                "Market Cap": data[crypto][f"{currency}_market_cap"],
+                "Volume (24h)": data[crypto][f"{currency}_24h_vol"]
+            })
+        return pd.DataFrame(crypto_data)
+    except requests.exceptions.RequestException as e:
+        console.print(f"[red]Error fetching data: {e}[/red]")
+        return None
+
+def display_crypto_data(data):
+    table = Table(title="Cryptocurrency Market Data", box=SQUARE, highlight=True)
+    table.add_column("Name", style="bold magenta")
+    table.add_column("Price (USD)", justify="right", style="green")
+    table.add_column("24h Change (%)", justify="right", style="yellow")
+    table.add_column("Market Cap (Billion USD)", justify="right", style="cyan")
+    table.add_column("Volume (Billion USD)", justify="right", style="blue")
+    for _, row in data.iterrows():
+        table.add_row(
+            row["Name"],
+            f"${row['Price']:.2f}",
+            f"{row['24h Change (%)']:.2f}%",
+            f"${row['Market Cap'] / 1e9:.2f}B",
+            f"${row['Volume (24h)'] / 1e9:.2f}B"
+        )
+    console.print(table)
+
+def fetch_expert_opinions():
+    opinions = []
+    sources = [
+        "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "https://cryptoslate.com/rss/",
+        "https://cointelegraph.com/rss"
+    ]
+    for source in sources:
+        try:
+            feed = feedparser.parse(source)
+            for article in feed.entries[:5]:
+                opinions.append({
+                    "source": source.split("//")[1].split("/")[0],
+                    "title": article.title,
+                    "link": article.link,
+                    "published": article.published
+                })
+        except Exception as e:
+            console.print(f"[red]Error fetching from {source}: {e}[/red]")
+    return opinions
+
+def display_expert_opinions(opinions):
+    table = Table(title="Expert Opinions", box=SQUARE)
+    table.add_column("Source", style="bold magenta")
+    table.add_column("Title", style="green")
+    table.add_column("Published", justify="center", style="yellow")
+    table.add_column("Link", justify="left", style="blue")
+    for opinion in opinions:
+        table.add_row(
+            opinion["source"],
+            opinion["title"],
+            opinion["published"],
+            f"[link={opinion['link']}]Click Here[/link]"
+        )
+    console.print(table)
+
+def live_monitoring(interval=15):
+    console.print("[bold cyan]Starting live monitoring... Press Ctrl+C to stop and return to the main menu.[/bold cyan]")
+    try:
+        while True:
+            crypto_data = fetch_crypto_data()
+            if crypto_data is not None:
+                console.clear()
+                console.print("[bold cyan]Live Monitoring: Cryptocurrency Data[/bold cyan]")
+                display_crypto_data(crypto_data)
+                console.print(f"[yellow]Next update in {interval} seconds...[/yellow]")
+            else:
+                console.print("[red]Error fetching data. Retrying in {interval} seconds...[/red]")
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Live monitoring stopped. Returning to the main menu...[/yellow]")
+
+def live_monitoring_submenu():
+    while True:
+        console.print("""
+[bold green]Live Monitoring Menu[/bold green]
+1. Start Live Monitoring (15-second updates)
+2. Return to Main Menu
+""")
+        choice = console.input("[bold green]Your choice: [/bold green]").strip()
+        if choice == "1":
+            live_monitoring()
+        elif choice == "2":
+            console.print("[cyan]Returning to the main menu...[/cyan]")
+            break
+        else:
+            console.print("[red]Invalid option. Please try again.[/red]")
+
+def greeting_screen():
+    while True:
+        console.clear()
+        console.print("""
+[bold cyan]
+ .d8888b.                            888                    888b     d888                   d8b 888                    
+d88P  Y88b                           888                    8888b   d8888                   Y8P 888                    
+888    888                           888                    88888b.d88888                       888                    
+888        888d888 888  888 88888b.  888888 .d88b.          888Y88888P888  .d88b.  88888b.  888 888888 .d88b.  888d888 
+888        888P"   888  888 888 "88b 888   d88""88b         888 Y888P 888 d88""88b 888 "88b 888 888   d88""88b 888P"   
+888    888 888     888  888 888  888 888   888  888         888  Y8P  888 888  888 888  888 888 888   888  888 888     
+Y88b  d88P 888     Y88b 888 888 d88P Y88b. Y88..88P         888   "   888 Y88..88P 888  888 888 Y88b. Y88..88P 888     
+ "Y8888P"  888      "Y88888 88888P"   "Y888 "Y88P" 88888888 888       888  "Y88P"  888  888 888  "Y888 "Y88P"  888     
+                        888 888                                                                                        
+                   Y8b d88P 888                                                                                        
+                    "Y88P"  888 
+[/bold cyan]
+[bold yellow]Welcome to the Cryptocurrency Monitor![/bold yellow]
+
+[yellow]Instructions:[/yellow]
+  - Select [cyan]1[/cyan] to monitor cryptocurrency prices and market data.
+  - Select [cyan]2[/cyan] to view expert opinions.
+  - Select [cyan]3[/cyan] for live monitoring.
+  - Select [cyan]4[/cyan] to exit the program.
+
+[bold green]Please select an option (1, 2, 3, or 4): [/bold green]
+        """)
+        choice = console.input("[bold green]Your choice: [/bold green]").strip()
+        if choice == "1":
+            crypto_data = fetch_crypto_data()
+            if crypto_data is not None:
+                display_crypto_data(crypto_data)
+            input("\nPress Enter to return to the main menu...")
+        elif choice == "2":
+            expert_opinions = fetch_expert_opinions()
+            if expert_opinions:
+                display_expert_opinions(expert_opinions)
+            input("\nPress Enter to return to the main menu...")
+        elif choice == "3":
+            live_monitoring_submenu()
+        elif choice == "4":
+            console.print("[cyan]Exiting the program. Goodbye![/cyan]")
+            exit()
+        else:
+            console.print("[red]Invalid option. Please try again.[/red]")
+
+def main():
+    greeting_screen()
+
+if __name__ == "__main__":
+    main()
